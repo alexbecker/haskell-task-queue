@@ -91,3 +91,21 @@ pollWorkers queue = do
 	let newResults = map result $ filter success responses
 	let newTasks = concat $ map getTasks responses
 	return $ Queue (notBusy ++ readyWorkers queue) stillBusy (allTasks queue ++ newTasks) (getResults queue ++ newResults)
+
+block :: (Worker w a) => Queue w a -> IO (Queue w a)
+block queue = do
+	statuses <- sequence $ map ready $ busyWorkers queue
+	if and statuses
+		then return queue
+		else block queue
+
+gc :: (Worker w a) => Queue w a -> Queue w a
+gc (Queue w1 w2 tasks results) = Queue w1 w2 tasks $ filter (\r -> getTask r `elem` needed) results where
+	needed = nub $ concat $ map dependencies tasks
+
+run :: (Worker w a) => Queue w a -> Int -> IO ()
+run queue gcInterval = do
+	queue <- foldl1 (.) (replicate gcInterval ((>>= pollWorkers) . (>>= assignTasks))) $ return queue
+	queue <- block queue
+	queue <- pollWorkers queue
+	run (gc queue) gcInterval
