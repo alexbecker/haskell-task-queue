@@ -6,7 +6,8 @@ import Data.Maybe
 import Data.Tuple
 import Data.Function
 
-data Task = Task Int [Task]
+data Task = Task Int [Int]
+	deriving (Show)
 
 instance Eq Task where
 	(==) = (==) `on` taskID
@@ -14,22 +15,27 @@ instance Eq Task where
 taskID :: Task -> Int
 taskID (Task x _ ) = x
 
-dependencies :: Task -> [Task]
-dependencies (Task _ y) = y
+dependencyIDs :: Task -> [Int]
+dependencyIDs (Task _ y) = y
 
-data Result a = Result Task a
+data Result a = Result Int a
+	deriving (Show)
 
-getTask :: Result a -> Task
-getTask (Result x _) = x
+getTaskID :: Result a -> Int
+getTaskID (Result x _) = x
 
 getResult :: Result a -> a
 getResult (Result _ y) = y
 
+lookupResult :: Int -> [Result a] -> Maybe a
+lookupResult n results = find ((n ==) . getTaskID) results >>= return . getResult
+
 -- extracts results for dependencies of a task
 relevant :: Task -> [Result a] -> [Result a]
-relevant t = filter ((t ==) . getTask)
+relevant t = filter ((flip elem (dependencyIDs t)) . getTaskID)
 
 data Response a = Response (Maybe (Result a)) [Task]
+	deriving (Show)
 
 success :: Response a -> Bool
 success (Response x _) = isJust x
@@ -63,7 +69,7 @@ allTasks :: Queue w a -> [Task]
 allTasks (Queue _ _ tasks _) = tasks
 
 readyTasks :: Queue w a -> [Task]
-readyTasks (Queue _ _ tasks results) = filter (and . map (flip elem (map getTask results)) . dependencies) tasks
+readyTasks (Queue _ _ tasks results) = filter (and . map (flip elem (map getTaskID results)) . dependencyIDs) tasks
 
 setStatus :: [w] -> Bool -> [(w, Bool)]
 setStatus workers = zip workers . replicate (length workers)
@@ -71,7 +77,7 @@ setStatus workers = zip workers . replicate (length workers)
 assignTasks :: (Worker w a) => Queue w a -> IO (Queue w a)
 assignTasks queue = do
 	sequence_ $ map (\(w,t) -> send w t (relevant t results)) $ zip usedWorkers assignedTasks
-	return $ Queue unusedWorkers (usedWorkers ++ busyWorkers queue) (tasks \\ assignedTasks) results
+	return $ Queue unusedWorkers (usedWorkers ++ busyWorkers queue) (allTasks queue \\ assignedTasks) results
 	where
 		tasks = readyTasks queue
 		workers = readyWorkers queue
@@ -100,8 +106,8 @@ block queue = do
 		else block queue
 
 gc :: (Worker w a) => Queue w a -> Queue w a
-gc (Queue w1 w2 tasks results) = Queue w1 w2 tasks $ filter (\r -> getTask r `elem` needed) results where
-	needed = nub $ concat $ map dependencies tasks
+gc (Queue w1 w2 tasks results) = Queue w1 w2 tasks $ filter (\r -> getTaskID r `elem` needed) results where
+	needed = nub $ concat $ map dependencyIDs tasks
 
 run :: (Worker w a) => Queue w a -> Int -> IO ()
 run queue gcInterval = do
