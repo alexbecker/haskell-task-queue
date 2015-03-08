@@ -1,14 +1,12 @@
 -- Test tasks for TaskQueue
 -- Must be executed in order, so no concurrency exists
--- Prints the numbers in [0..100] in order
+-- Prints natural numbers sequentially
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Main where
 
 import Control.Concurrent
 import Data.Maybe
 import TaskQueue
-
-sequentialTasks = Task 0 [] : map (\n -> Task (n + 1) [n]) [0..99]
 
 data IntWorker = IntWorker (MVar Int)
 
@@ -24,11 +22,11 @@ instance Worker IntWorker Int where
 				then 0
 				else 1 + (fromJust $ lookupResult (head $ dependencyIDs task) results)
 	receive (IntWorker response) = do
-		nPlusOne <- takeMVar response
-		return $ Response (Just $ Result nPlusOne nPlusOne) []
+		n <- takeMVar response
+		return $ Response (Just $ Result n n) [Task (n + 1) [n]]
 
 main :: IO ()
 main = do
 	workers <- sequence $ replicate 5 newIntWorker
-	let queue = Queue workers [] sequentialTasks [] :: Queue IntWorker Int
+	let queue = Queue workers [] [Task 0 []] [] :: Queue IntWorker Int
 	run queue 10
