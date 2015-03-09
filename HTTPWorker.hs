@@ -9,30 +9,33 @@ import Control.Concurrent
 import Data.Either
 import TaskQueue
 
-data HTTPWorker a = HTTPWorker (Task -> [Result a] -> HTTP.Request_String) (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) Int (MVar Task) (MVar (Response a))
+data HTTPWorker a = HTTPWorker (Task -> [Result a] -> HTTP.Request_String) (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) Int Bool (MVar Task) (MVar (Response a))
 
 type HTTPQueue a = Queue (HTTPWorker a) a
 
-newHTTPWorker :: (Task -> [Result a] -> HTTP.Request_String) -> (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) -> Int -> IO (HTTPWorker a)
-newHTTPWorker requestBuilder responseParser timeout = do
+newHTTPWorker :: (Task -> [Result a] -> HTTP.Request_String) -> (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) -> Int -> Bool -> IO (HTTPWorker a)
+newHTTPWorker requestBuilder responseParser timeout retry = do
 	index <- newMVar (Task 0 [])	-- task is arbitrary, just needs to be non-empty so that swap doesn't block
 	response <- newEmptyMVar
-	return $ HTTPWorker requestBuilder responseParser timeout index response
+	return $ HTTPWorker requestBuilder responseParser timeout retry index response
 
 buildRequest :: HTTPWorker a -> Task -> [Result a] -> HTTP.Request_String
-buildRequest (HTTPWorker x _ _ _ _) = x
+buildRequest (HTTPWorker x _ _ _ _ _) = x
 
 parseResponse :: HTTPWorker a -> Task -> Net.Result (HTTP.Response String) -> IO (Response a)
-parseResponse (HTTPWorker _ y _ _ _) = y
+parseResponse (HTTPWorker _ y _ _ _ _) = y
 
 getTimeout :: HTTPWorker a -> Int
-getTimeout (HTTPWorker _ _ z _ _) = z
+getTimeout (HTTPWorker _ _ z _ _ _) = z
+
+retryOnTimeout :: HTTPWorker a -> Bool
+retryOnTimeout (HTTPWorker _ _ _ w _ _) = w
 
 getTaskMVar :: HTTPWorker a -> MVar Task
-getTaskMVar (HTTPWorker _ _ _ w _) = w
+getTaskMVar (HTTPWorker _ _ _ _ u _) = u
 
 getResponseMVar :: HTTPWorker a -> MVar (Response a)
-getResponseMVar (HTTPWorker _ _ _ _ u) = u
+getResponseMVar (HTTPWorker _ _ _ _ _ v) = v
 
 instance Queryable (HTTPWorker a) where
 	ready worker = isEmptyMVar (getResponseMVar worker) >>= return . not
@@ -45,11 +48,12 @@ makeHTTPRequest worker task results = do
 	tryPutMVar (getResponseMVar worker) parsedResponse
 	return ()
 
--- Timeout behavior: return failure and assign the task to the queue again
 onTimeout :: HTTPWorker a -> ThreadId -> IO ()
 onTimeout worker threadID = do
 	task <- readMVar $ getTaskMVar worker
-	timedOut <- tryPutMVar (getResponseMVar worker) $ Response Nothing [task]
+	timedOut <- tryPutMVar (getResponseMVar worker) $ Response Nothing $ if retryOnTimeout worker
+																			then [task]
+																			else []
 	if timedOut
 		then killThread threadID >> putStrLn "timeout"
 		else return ()

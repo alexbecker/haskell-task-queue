@@ -120,13 +120,19 @@ run queue gcInterval = do
 	run (gc queue) gcInterval
 
 -- allows the queue to have a state which is transformed after each poll
--- we don't bother with gc in this case, as the queue can take care of it
 type StatefulQueue s w a = StateT s IO (Queue w a)
 
 stepWithState :: (Worker w a) => StatefulQueue s w a -> StatefulQueue s w a
 stepWithState queue = queue >>= (liftIO . step)
 
-runWithState :: (Worker w a) => StatefulQueue s w a -> (StatefulQueue s w a -> StatefulQueue s w a) -> StateT s IO ()
-runWithState statefulQueue transform = do
+runWithState :: (Worker w a) => StatefulQueue s w a -> (StatefulQueue s w a -> StatefulQueue s w a) -> Int -> StateT s IO ()
+runWithState statefulQueue transform gcInterval = _runWithState statefulQueue transform gcInterval 0
+
+-- the composition strategy for the stateless queue does not work here 
+-- because we need to force strictness at each step, so we use iteration instead
+_runWithState :: (Worker w a) => StatefulQueue s w a -> (StatefulQueue s w a -> StatefulQueue s w a) -> Int -> Int -> StateT s IO ()
+_runWithState statefulQueue transform gcInterval gcIndex = do
 	queue <- transform $ stepWithState $ statefulQueue
-	runWithState (return queue) transform
+	if gcIndex == gcInterval
+		then _runWithState (return $ gc queue) transform gcInterval 0
+		else _runWithState (return queue) transform gcInterval (gcIndex + 1)

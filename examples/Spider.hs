@@ -75,7 +75,13 @@ removeDuplicateURLs spiderQueue = do
 	let allVisitedURLs = Set.union visitedURLs $ Set.fromList newURLs
 	put (baseTaskID + newURLCount, allVisitedURLs)
 
-	return $ Queue (readyWorkers queue) (busyWorkers queue) (allTasks queue ++ newTasks) (oldResults ++ newResults)
+	-- dump old results and tasks if there are more than 1000
+	-- safe to dump results because tasks are never repeated on failure
+	let (allResults, tasks) = if length oldResults > 1000
+		then (newResults, newTasks)
+		else (oldResults ++ newResults, allTasks queue ++ newTasks)
+
+	return $ Queue (readyWorkers queue) (busyWorkers queue) tasks allResults
 
 main :: IO ()
 main = do
@@ -83,7 +89,9 @@ main = do
 	let numWorkers = read $ head args
 	let timeout = read (args !! 1)
 	let firstURL = args !! 2
-	workers <- sequence $ map (\_ -> newHTTPWorker (requestBuilder firstURL) responseParser timeout) [0 .. numWorkers - 1]
+	workers <- sequence $ map (\_ -> newHTTPWorker (requestBuilder firstURL) responseParser timeout False) [0 .. numWorkers - 1]
 	let queue = newQueue workers [Task 0 []]
 	let statefulQueue = liftIO $ return queue	:: SpiderQueue
-	execStateT (runWithState statefulQueue removeDuplicateURLs) (1, Set.fromList [firstURL]) >> return ()
+
+	-- we turn garbage collection off because the program eats through almost as much memory with it
+	execStateT (runWithState statefulQueue removeDuplicateURLs 1000000000) (1, Set.fromList [firstURL]) >> return ()
