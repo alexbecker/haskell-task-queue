@@ -5,6 +5,7 @@ import Data.List
 import Data.Maybe
 import Data.Tuple
 import Data.Function
+import Control.Monad.State
 
 data Task = Task Int [Int]
 	deriving (Show)
@@ -101,20 +102,34 @@ pollWorkers queue = do
 	let newTasks = concat $ map getTasks responses
 	return $ Queue (notBusy ++ readyWorkers queue) stillBusy (allTasks queue ++ newTasks) (getResults queue ++ newResults)
 
-block :: (Worker w a) => Queue w a -> IO (Queue w a)
+block :: (Worker w a) => Queue w a -> IO ()
 block queue = do
 	statuses <- sequence $ map ready $ busyWorkers queue
 	if and statuses
-		then return queue
+		then return ()
 		else block queue
 
 gc :: (Worker w a) => Queue w a -> Queue w a
 gc (Queue w1 w2 tasks results) = Queue w1 w2 tasks $ filter (\r -> getResultID r `elem` needed) results where
 	needed = nub $ concat $ map dependencyIDs tasks
 
+step :: (Worker w a) => Queue w a -> IO (Queue w a)
+step queue = assignTasks queue >>= pollWorkers
+
 run :: (Worker w a) => Queue w a -> Int -> IO ()
 run queue gcInterval = do
-	queue <- foldl1 (.) (replicate gcInterval ((>>= pollWorkers) . (>>= assignTasks))) $ return queue
-	queue <- block queue
-	queue <- pollWorkers queue
+	queue <- foldl1 (.) (replicate gcInterval (>>= step)) $ return queue
+	queue <- block queue >> pollWorkers queue
 	run (gc queue) gcInterval
+
+-- allows the queue to have a state which is transformed after each poll
+-- we don't bother with gc in this case, as the queue can take care of it
+type StatefulQueue s w a = StateT s IO (Queue w a)
+
+stepWithState :: (Worker w a) => StatefulQueue s w a -> StatefulQueue s w a
+stepWithState queue = queue >>= (liftIO . step)
+
+runWithState :: (Worker w a) => StatefulQueue s w a -> (StatefulQueue s w a -> StatefulQueue s w a) -> StateT s IO ()
+runWithState statefulQueue transform = do
+	queue <- transform $ stepWithState $ statefulQueue
+	runWithState (return queue) transform

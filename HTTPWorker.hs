@@ -11,6 +11,8 @@ import TaskQueue
 
 data HTTPWorker a = HTTPWorker (Task -> [Result a] -> HTTP.Request_String) (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) Int (MVar Task) (MVar (Response a))
 
+type HTTPQueue a = Queue (HTTPWorker a) a
+
 newHTTPWorker :: (Task -> [Result a] -> HTTP.Request_String) -> (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) -> Int -> IO (HTTPWorker a)
 newHTTPWorker requestBuilder responseParser timeout = do
 	index <- newMVar (Task 0 [])	-- task is arbitrary, just needs to be non-empty so that swap doesn't block
