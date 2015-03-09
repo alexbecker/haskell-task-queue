@@ -56,6 +56,9 @@ class (Queryable w) => Worker w a where
 -- values represent readyWorkers, busyWorkers, tasks, results
 data Queue w a = Queue [w] [w] [Task] [Result a]
 
+newQueue :: [w] -> [Task] -> Queue w a
+newQueue workers tasks = Queue workers [] tasks []
+
 getResults :: Queue w a -> [Result a]
 getResults (Queue _ _ _ results) = results
 
