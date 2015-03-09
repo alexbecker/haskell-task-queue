@@ -21,18 +21,18 @@ dependencyIDs (Task _ y) = y
 data Result a = Result Int a
 	deriving (Show)
 
-getTaskID :: Result a -> Int
-getTaskID (Result x _) = x
+getResultID :: Result a -> Int
+getResultID (Result x _) = x
 
 getResult :: Result a -> a
 getResult (Result _ y) = y
 
 lookupResult :: Int -> [Result a] -> Maybe a
-lookupResult n results = find ((n ==) . getTaskID) results >>= return . getResult
+lookupResult n results = find ((n ==) . getResultID) results >>= return . getResult
 
 -- extracts results for dependencies of a task
 relevant :: Task -> [Result a] -> [Result a]
-relevant t = filter ((flip elem (dependencyIDs t)) . getTaskID)
+relevant t = filter ((flip elem (dependencyIDs t)) . getResultID)
 
 data Response a = Response (Maybe (Result a)) [Task]
 	deriving (Show)
@@ -72,7 +72,7 @@ allTasks :: Queue w a -> [Task]
 allTasks (Queue _ _ tasks _) = tasks
 
 readyTasks :: Queue w a -> [Task]
-readyTasks (Queue _ _ tasks results) = filter (and . map (flip elem (map getTaskID results)) . dependencyIDs) tasks
+readyTasks (Queue _ _ tasks results) = filter (and . map (flip elem (map getResultID results)) . dependencyIDs) tasks
 
 setStatus :: [w] -> Bool -> [(w, Bool)]
 setStatus workers = zip workers . replicate (length workers)
@@ -109,7 +109,7 @@ block queue = do
 		else block queue
 
 gc :: (Worker w a) => Queue w a -> Queue w a
-gc (Queue w1 w2 tasks results) = Queue w1 w2 tasks $ filter (\r -> getTaskID r `elem` needed) results where
+gc (Queue w1 w2 tasks results) = Queue w1 w2 tasks $ filter (\r -> getResultID r `elem` needed) results where
 	needed = nub $ concat $ map dependencyIDs tasks
 
 run :: (Worker w a) => Queue w a -> Int -> IO ()

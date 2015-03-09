@@ -9,13 +9,17 @@ It does not support worker capabilities, i.e. every worker must be able to proce
 The queue must also be periodically blocked for garbage collection of unneeded results.
 
 Queues consist of workers, tasks and results.
-Tasks contain simply an ID and the IDs of tasks they depend on.
+Results each have an ID associated with them.
+Tasks contain simply an ID and the IDs of results they depend on.
+If task IDs are not unique, tasks may be deleted without being processed.
+
 Workers must satisfy the following properties:
  - Stateless
  - A "send" function which initiates processing a task using the results of tasks it depends on
  - A "receive" function which returns the either the result of the task or failure, and a list
 of new tasks to add to the queue
  - A "ready" function which reports whether "receive" is ready to be called
+
 The queue gives the following guarantees:
  - Each task will be processed at most once
  - If all a task's dependencies' results exist in the queue, it will eventually be processed (no deadlock)
