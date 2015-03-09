@@ -10,9 +10,6 @@ import Control.Monad.State
 data Task = Task Int [Int]
 	deriving (Show)
 
-instance Eq Task where
-	(==) = (==) `on` taskID
-
 taskID :: Task -> Int
 taskID (Task x _ ) = x
 
