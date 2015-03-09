@@ -8,7 +8,7 @@ import Data.Function
 import Control.Monad.State
 
 data Task = Task Int [Int]
-	deriving (Show)
+	deriving (Show, Eq)
 
 taskID :: Task -> Int
 taskID (Task x _ ) = x

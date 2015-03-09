@@ -5,12 +5,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Main where
 
+import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Char8 as C
 import Control.Concurrent
 import System.Environment
 import Network.HTTP.Conduit
 import Network.Connection
-import qualified Data.ByteString.Lazy as L
-import qualified Data.ByteString.Char8 as C
 import Data.Maybe
 import Data.List
 import TaskQueue

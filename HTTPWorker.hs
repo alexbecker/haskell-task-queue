@@ -3,10 +3,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 module HTTPWorker where
 
-import Control.Concurrent
-import Data.Either
 import qualified Network.HTTP as HTTP
 import qualified Network.Stream as Net
+import Control.Concurrent
+import Data.Either
 import TaskQueue
 
 data HTTPWorker a = HTTPWorker (Task -> [Result a] -> HTTP.Request_String) (Task -> Net.Result (HTTP.Response String) -> IO (Response a)) Int (MVar Task) (MVar (Response a))
@@ -51,7 +51,7 @@ onTimeout worker threadID = do
 	task <- readMVar $ getTaskMVar worker
 	timedOut <- tryPutMVar (getResponseMVar worker) $ Response Nothing [task]
 	if timedOut
-		then putStrLn "timeout" >> killThread threadID
+		then killThread threadID >> putStrLn "timeout"
 		else return ()
 
 instance Worker (HTTPWorker a) a where

@@ -9,7 +9,7 @@ import Control.Monad.State
 import System.Environment
 import Text.Regex.Posix
 import Data.Maybe
-import Data.List
+import Data.List.Ordered
 import TaskQueue
 import HTTPWorker
 
@@ -61,7 +61,7 @@ removeDuplicateURLs spiderQueue = do
 	let oldResults = filter (not . isNewResult) results
 
 	-- flatten the newResults and remove the ones which have already been visited
-	let newURLs = nub $ filter (not . flip Set.member visitedURLs) $ concat $ map targetURLs newResults
+	let newURLs = nub $ sort $ filter (not . flip Set.member visitedURLs) $ concat $ map targetURLs newResults
 	let newURLCount = length newURLs
 	let newResults = map (\n -> Result (baseTaskID + n) [newURLs !! (n - 1)]) [1..newURLCount]
 
